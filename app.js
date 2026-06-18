@@ -1098,12 +1098,15 @@ function capitalize(str) {
     return str.charAt(0).toUpperCase() + str.slice(1);
 }
 
-function buildProjectZip() {
+function buildProjectZip(basePackage = 'org.minombre', projectName = 'proyecto') {
     saveDbConfig();
 
     const zip = new JSZip();
-    const appName = state.dbConfig.appName.toLowerCase();
-    const pkgPath = `src/main/java/org/agaray/swagger/${appName}`;
+    const appName = projectName.toLowerCase();
+    const pkgFolder = basePackage.replace(/\./g, '/');
+    const pkgPath = `src/main/java/${pkgFolder}/${appName}`;
+    const testPkgPath = `src/test/java/${pkgFolder}/${appName}`;
+    const fullPkg = `${basePackage}.${appName}`;
 
     // 1. pom.xml
     const pomContent = `<?xml version="1.0" encoding="UTF-8"?>
@@ -1117,7 +1120,7 @@ function buildProjectZip() {
 		<version>3.4.0</version>
 		<relativePath />
 	</parent>
-	<groupId>org.agaray.swagger</groupId>
+	<groupId>${basePackage}</groupId>
 	<artifactId>${appName}</artifactId>
 	<version>0.0.1-SNAPSHOT</version>
 	<name>${appName}</name>
@@ -1172,7 +1175,7 @@ function buildProjectZip() {
 
     // 2. Application Class
     const mainClassName = capitalize(appName) + "Application";
-    const appClassContent = `package org.agaray.swagger.${appName};
+    const appClassContent = `package ${fullPkg};
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
@@ -1338,7 +1341,7 @@ spring.jpa.properties.hibernate.connection.handling_mode=DELAYED_ACQUISITION_AND
 
         const sortedImports = Array.from(imports).sort().map(imp => `import ${imp};`).join('\n');
 
-        const modelCode = `package org.agaray.swagger.${appName}.models;
+        const modelCode = `package ${fullPkg}.models;
 
 ${sortedImports}
 
@@ -1355,9 +1358,9 @@ ${modelFields.join('\n\n')}
         zip.file(`${pkgPath}/models/${ent.name}.java`, modelCode);
 
         // --- REPOSITORY ---
-        const repoCode = `package org.agaray.swagger.${appName}.repositories;
+        const repoCode = `package ${fullPkg}.repositories;
 
-import org.agaray.swagger.${appName}.models.${ent.name};
+import ${fullPkg}.models.${ent.name};
 import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface ${ent.name}Repository extends JpaRepository<${ent.name}, Long> {
@@ -1365,11 +1368,11 @@ public interface ${ent.name}Repository extends JpaRepository<${ent.name}, Long> 
         zip.file(`${pkgPath}/repositories/${ent.name}Repository.java`, repoCode);
 
         // --- SERVICE ---
-        const serviceCode = `package org.agaray.swagger.${appName}.services;
+        const serviceCode = `package ${fullPkg}.services;
 
 import lombok.RequiredArgsConstructor;
-import org.agaray.swagger.${appName}.models.${ent.name};
-import org.agaray.swagger.${appName}.repositories.${ent.name}Repository;
+import ${fullPkg}.models.${ent.name};
+import ${fullPkg}.repositories.${ent.name}Repository;
 import org.springframework.stereotype.Service;
 import java.util.List;
 
@@ -1402,11 +1405,11 @@ public class ${ent.name}Service {
         zip.file(`${pkgPath}/services/${ent.name}Service.java`, serviceCode);
 
         // --- API REST CONTROLLER ---
-        const apiControllerCode = `package org.agaray.swagger.${appName}.controllers.api;
+        const apiControllerCode = `package ${fullPkg}.controllers.api;
 
 import lombok.RequiredArgsConstructor;
-import org.agaray.swagger.${appName}.models.${ent.name};
-import org.agaray.swagger.${appName}.services.${ent.name}Service;
+import ${fullPkg}.models.${ent.name};
+import ${fullPkg}.services.${ent.name}Service;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -1462,7 +1465,7 @@ public class ${ent.name}Controller {
         zip.file(`${pkgPath}/controllers/api/${ent.name}Controller.java`, apiControllerCode);
 
         // --- API REST CONTROLLER UNIT TEST ---
-        const apiControllerTestCode = `package org.agaray.swagger.${appName}.controllers.api;
+        const apiControllerTestCode = `package ${fullPkg}.controllers.api;
 
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -1470,8 +1473,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import java.util.Collections;
 
-import org.agaray.swagger.${appName}.models.${ent.name};
-import org.agaray.swagger.${appName}.services.${ent.name}Service;
+import ${fullPkg}.models.${ent.name};
+import ${fullPkg}.services.${ent.name}Service;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -1497,7 +1500,7 @@ class ${ent.name}ControllerTests {
                 .andExpect(status().isOk());
     }
 }`;
-        zip.file(`src/test/java/org/agaray/swagger/${appName}/controllers/api/${ent.name}ControllerTests.java`, apiControllerTestCode);
+        zip.file(`src/test/java/${fullPkg}/controllers/api/${ent.name}ControllerTests.java`, apiControllerTestCode);
 
         // --- VIEW CONTROLLER ---
         let injectedServicesFields = [];
@@ -1519,14 +1522,14 @@ class ${ent.name}ControllerTests {
         const uniqueInjectedServicesFields = Array.from(new Set(injectedServicesFields)).join('\n');
         const uniqueViewInjectModels = Array.from(new Set(viewInjectModels)).join('\n');
 
-        const viewControllerCode = `package org.agaray.swagger.${appName}.controllers.view;
+        const viewControllerCode = `package ${fullPkg}.controllers.view;
 
 import lombok.RequiredArgsConstructor;
-import org.agaray.swagger.${appName}.models.${ent.name};
-import org.agaray.swagger.${appName}.services.${ent.name}Service;
-${relationsInfo.manyToOnes.map(r => `import org.agaray.swagger.${appName}.services.${r.target.name}Service;`).join('\n')}
-${relationsInfo.manyToManySource.map(r => `import org.agaray.swagger.${appName}.services.${r.target.name}Service;`).join('\n')}
-${relationsInfo.oneToOnes.filter(r => r.isOwner).map(r => `import org.agaray.swagger.${appName}.services.${r.target.name}Service;`).join('\n')}
+import ${fullPkg}.models.${ent.name};
+import ${fullPkg}.services.${ent.name}Service;
+${relationsInfo.manyToOnes.map(r => `import ${fullPkg}.services.${r.target.name}Service;`).join('\n')}
+${relationsInfo.manyToManySource.map(r => `import ${fullPkg}.services.${r.target.name}Service;`).join('\n')}
+${relationsInfo.oneToOnes.filter(r => r.isOwner).map(r => `import ${fullPkg}.services.${r.target.name}Service;`).join('\n')}
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.*;
@@ -1898,7 +1901,7 @@ ${sidebarLinks}
     zip.file("src/main/resources/templates/layout.html", layoutContent);
 
     // 6. HomeViewController & templates/index.html
-    const homeViewControllerContent = `package org.agaray.swagger.${appName}.controllers.view;
+    const homeViewControllerContent = `package ${fullPkg}.controllers.view;
 
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -1943,7 +1946,7 @@ public class HomeViewController {
     zip.file("src/main/resources/templates/index.html", homeHtmlContent);
 
     // 6.5. Base Application Test
-    const mainClassTestContent = `package org.agaray.swagger.${appName};
+    const mainClassTestContent = `package ${fullPkg};
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -1956,7 +1959,7 @@ class ${mainClassName}Tests {
     }
 
 }`;
-    zip.file(`src/test/java/org/agaray/swagger/${appName}/${mainClassName}Tests.java`, mainClassTestContent);
+    zip.file(`src/test/java/${fullPkg}/${mainClassName}Tests.java`, mainClassTestContent);
 
     // 7. Maven build scripts
     const runTestsBat = `@echo off
@@ -1967,9 +1970,9 @@ pause`;
     return zip;
 }
 
-function generateProjectZip() {
-    const zip = buildProjectZip();
-    const appName = state.dbConfig.appName.toLowerCase();
+function generateProjectZip(basePackage = 'org.minombre', projectName = 'proyecto') {
+    const zip = buildProjectZip(basePackage, projectName);
+    const appName = projectName.toLowerCase();
     zip.generateAsync({type:"blob"}).then(function(content) {
         const element = document.createElement("a");
         element.href = URL.createObjectURL(content);
@@ -1980,10 +1983,10 @@ function generateProjectZip() {
     });
 }
 
-async function generateProjectToFolder() {
+async function generateProjectToFolder(basePackage = 'org.minombre', projectName = 'proyecto') {
     try {
         const dirHandle = await window.showDirectoryPicker();
-        const zip = buildProjectZip();
+        const zip = buildProjectZip(basePackage, projectName);
         
         // Write files to selected directory recursively
         for (const [relativePath, zipEntry] of Object.entries(zip.files)) {
@@ -2024,13 +2027,17 @@ function openGenerateModal() {
 }
 
 function chooseGenerateFolder() {
+    const basePackage = document.getElementById('gen-base-package').value.trim() || 'org.minombre';
+    const projectName = document.getElementById('gen-project-name').value.trim() || 'proyecto';
     closeModal('modal-generate-choose');
-    generateProjectToFolder();
+    generateProjectToFolder(basePackage, projectName);
 }
 
 function chooseGenerateZip() {
+    const basePackage = document.getElementById('gen-base-package').value.trim() || 'org.minombre';
+    const projectName = document.getElementById('gen-project-name').value.trim() || 'proyecto';
     closeModal('modal-generate-choose');
-    generateProjectZip();
+    generateProjectZip(basePackage, projectName);
 }
 
 function saveModelFile() {
