@@ -764,6 +764,9 @@ function renderEditAttributesList(entity) {
             <td class="px-4 py-2 text-center">
                 <input type="checkbox" class="w-4 h-4 rounded border-slate-800 bg-slate-950 text-indigo-600 focus:ring-indigo-500" ${isId || attr.unique ? 'checked' : ''} ${isId ? 'disabled' : ''} onchange="updateAttributeUnique(${idx}, this.checked)">
             </td>
+            <td class="px-4 py-2 text-center">
+                <input type="checkbox" class="w-4 h-4 rounded border-slate-800 bg-slate-950 text-indigo-600 focus:ring-indigo-500" ${isId || attr.notNull ? 'checked' : ''} ${isId ? 'disabled' : ''} onchange="updateAttributeNotNull(${idx}, this.checked)">
+            </td>
             <td class="px-4 py-2">
                 <input type="text" value="${attr.name}" onchange="updateAttributeName(${idx}, this.value)" ${disabledAttr}>
             </td>
@@ -840,13 +843,23 @@ function updateAttributeUnique(index, val) {
     }
 }
 
+function updateAttributeNotNull(index, val) {
+    const entity = state.entities.find(e => e.id === activeEditEntityId);
+    if (entity && entity.attributes[index]) {
+        entity.attributes[index].notNull = val;
+        renderEntities();
+    }
+}
+
 function addNewAttributeRow() {
     const entity = state.entities.find(e => e.id === activeEditEntityId);
     if (!entity) return;
 
     entity.attributes.push({
         name: `attr_${entity.attributes.length}`,
-        type: 'String'
+        type: 'String',
+        unique: false,
+        notNull: false
     });
     renderEditAttributesList(entity);
     renderEntities();
@@ -1279,7 +1292,8 @@ spring.jpa.properties.hibernate.connection.handling_mode=DELAYED_ACQUISITION_AND
                     jType = 'java.time.LocalDate';
                 }
                 const uniqueStr = attr.unique ? ', unique = true' : '';
-                modelFields.push(`    @Column(nullable = false${uniqueStr})
+                const nullableStr = attr.notNull ? 'nullable = false' : 'nullable = true';
+                modelFields.push(`    @Column(${nullableStr}${uniqueStr})
     @Schema(description = "${attr.name}", example = "")
     private ${jType} ${attr.name};`);
             }
@@ -1823,15 +1837,29 @@ ${uniqueViewInjectModels}
                            a.type === 'Boolean' ? 'type="checkbox"' :
                            a.type === 'Date' ? 'type="date"' : 'type="text"';
 
+            const isUnique = a.unique;
+            const isRequired = a.notNull;
+            
+            let labelExtra = '';
+            if (isUnique && isRequired) {
+                labelExtra = ` <span class="text-indigo-400 cursor-help font-bold" title="Este campo es obligatorio y su valor debe ser único">*</span>`;
+            } else if (isRequired) {
+                labelExtra = ` <span class="text-indigo-400 cursor-help font-bold" title="Este campo es obligatorio">*</span>`;
+            } else if (isUnique) {
+                labelExtra = ` <span class="text-indigo-400 cursor-help font-bold" title="El valor de este campo debe ser único">*</span>`;
+            }
+
+            const reqAttr = isRequired ? 'required' : '';
+
             if (a.type === 'Boolean') {
                 formFields.push(`            <div class="flex items-center gap-2">
                 <input type="checkbox" th:field="*{\${${a.name}}}" id="${a.name}" class="bg-slate-950 border border-slate-800 rounded focus:ring-indigo-500 h-4 w-4">
-                <label for="${a.name}" class="text-xs font-bold text-slate-400 uppercase tracking-wider">${capitalize(a.name)}</label>
+                <label for="${a.name}" class="text-xs font-bold text-slate-400 uppercase tracking-wider">${capitalize(a.name)}${labelExtra}</label>
             </div>`);
             } else {
                 formFields.push(`            <div>
-                <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">${capitalize(a.name)}</label>
-                <input ${typeAttr} th:field="*{${a.name}}" required class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-indigo-500 text-sm" placeholder="Ej: ...">
+                <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">${capitalize(a.name)}${labelExtra}</label>
+                <input ${typeAttr} th:field="*{${a.name}}" ${reqAttr} class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-indigo-500 text-sm" placeholder="Ej: ...">
             </div>`);
             }
         });
@@ -1987,7 +2015,7 @@ ${uniqueViewInjectModels}
         </div>
     </header>
 
-    <div class="flex-1 flex overflow-hidden">
+    <div class="flex-1 flex overflow-hidden min-h-0">
         <aside class="w-60 bg-slate-900/40 border-r border-slate-850 flex flex-col z-20">
             <div class="p-4 flex-1">
                 <nav class="space-y-1">
@@ -1996,7 +2024,7 @@ ${sidebarLinks}
             </div>
         </aside>
 
-        <main class="flex-1 flex flex-col bg-slate-950 p-8 overflow-y-auto">
+        <main class="flex-1 flex flex-col bg-slate-950 p-8 overflow-y-auto min-h-0">
             <div th:replace="\${content}"></div>
         </main>
     </div>
@@ -2142,9 +2170,16 @@ function generateProjectZip(basePackage = 'org.minombre', projectName = 'proyect
     });
 }
 
+let lastDirHandle = null;
+
 async function generateProjectToFolder(basePackage = 'org.minombre', projectName = 'proyecto') {
     try {
-        const dirHandle = await window.showDirectoryPicker();
+        const options = {};
+        if (lastDirHandle) {
+            options.startIn = lastDirHandle;
+        }
+        const dirHandle = await window.showDirectoryPicker(options);
+        lastDirHandle = dirHandle;
         
         // Open progress modal
         openModal('modal-progress');
@@ -2233,12 +2268,16 @@ async function generateProjectToFolder(basePackage = 'org.minombre', projectName
 }
 
 function openGenerateModal() {
+    document.getElementById('gen-base-package').value = state.dbConfig.basePackage || 'org.minombre';
+    document.getElementById('gen-project-name').value = state.dbConfig.appName || 'proyecto';
     openModal('modal-generate-choose');
 }
 
 function chooseGenerateFolder() {
     const basePackage = document.getElementById('gen-base-package').value.trim() || 'org.minombre';
     const projectName = document.getElementById('gen-project-name').value.trim() || 'proyecto';
+    state.dbConfig.basePackage = basePackage;
+    state.dbConfig.appName = projectName;
     closeModal('modal-generate-choose');
     
     showConfirm('¡ATENCIÓN! Se eliminarán todos los archivos y subcarpetas existentes dentro de la carpeta que selecciones para evitar conflictos con el nuevo proyecto. ¿Deseas continuar?', () => {
@@ -2249,6 +2288,8 @@ function chooseGenerateFolder() {
 function chooseGenerateZip() {
     const basePackage = document.getElementById('gen-base-package').value.trim() || 'org.minombre';
     const projectName = document.getElementById('gen-project-name').value.trim() || 'proyecto';
+    state.dbConfig.basePackage = basePackage;
+    state.dbConfig.appName = projectName;
     closeModal('modal-generate-choose');
     generateProjectZip(basePackage, projectName);
 }
