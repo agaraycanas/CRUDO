@@ -96,6 +96,7 @@ function closeAllModals() {
     closeModal('modal-relation-config');
     closeModal('modal-db-config');
     closeModal('modal-custom-alert');
+    closeModal('modal-generate-choose');
 }
 
 function showAlert(message) {
@@ -731,22 +732,29 @@ function renderEditAttributesList(entity) {
 }
 
 function renameEntity() {
-    if (!activeEditEntityId) return;
+    if (!activeEditEntityId) return true;
     const input = document.getElementById('entity-edit-name').value.trim();
-    if (!input) return;
+    if (!input) return true;
 
     const newName = input.charAt(0).toUpperCase() + input.slice(1);
-    
-    if (state.entities.some(e => e.id !== activeEditEntityId && e.name.toLowerCase() === newName.toLowerCase())) {
-        showAlert('Ya existe otra entidad con ese nombre.');
-        return;
-    }
-
     const entity = state.entities.find(e => e.id === activeEditEntityId);
-    if (entity) {
+    if (!entity) return true;
+
+    if (entity.name !== newName) {
+        if (state.entities.some(e => e.id !== activeEditEntityId && e.name.toLowerCase() === newName.toLowerCase())) {
+            showAlert('Ya existe otra entidad con ese nombre.');
+            return false;
+        }
         entity.name = newName;
         renderEntities();
         renderRelations();
+    }
+    return true;
+}
+
+function saveEntityEditModal() {
+    if (renameEntity()) {
+        closeModal('modal-entity-edit');
     }
 }
 
@@ -1937,12 +1945,24 @@ async function generateProjectToFolder() {
                 await writable.close();
             }
         }
-        
-        showAlert('¡Proyecto generado con éxito directamente en la carpeta seleccionada!');
     } catch (err) {
         if (err.name !== 'AbortError') {
             console.error(err);
             showAlert('Error al escribir en la carpeta: ' + err.message);
         }
     }
+}
+
+function openGenerateModal() {
+    openModal('modal-generate-choose');
+}
+
+function chooseGenerateFolder() {
+    closeModal('modal-generate-choose');
+    generateProjectToFolder();
+}
+
+function chooseGenerateZip() {
+    closeModal('modal-generate-choose');
+    generateProjectZip();
 }
