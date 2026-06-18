@@ -418,6 +418,34 @@
         </div>
     </div>
 
+    <!-- MODAL: CUSTOM PROMPT (FILENAME) -->
+    <div id="modal-custom-prompt" class="hidden fixed inset-0 z-[110] flex items-center justify-center p-4">
+        <div class="absolute inset-0 bg-slate-950/80 backdrop-blur-sm" onclick="closeModal('modal-custom-prompt')"></div>
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-sm shadow-2xl relative z-10 flex flex-col overflow-hidden animate-scale-up">
+            <div class="px-5 py-4 border-b border-slate-800 flex items-center gap-2.5 text-indigo-400 bg-slate-900">
+                <i class="fa-solid fa-file-export text-lg"></i>
+                <h3 class="text-sm font-bold text-white tracking-wider uppercase">Guardar Modelo</h3>
+            </div>
+            <div class="p-5 space-y-4">
+                <div>
+                    <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Nombre del Archivo</label>
+                    <div class="relative flex items-center">
+                        <input type="text" id="custom-prompt-input" required class="w-full bg-slate-950 border border-slate-800 rounded-lg pl-3 pr-16 py-2 text-white focus:outline-none focus:border-indigo-500 text-sm" placeholder="modelo">
+                        <span class="absolute right-3 text-xs font-bold text-slate-500 font-mono">.json</span>
+                    </div>
+                </div>
+            </div>
+            <div class="px-5 py-3.5 border-t border-slate-800 bg-slate-950/40 flex justify-end gap-3">
+                <button type="button" onclick="closeModal('modal-custom-prompt')" class="px-3.5 py-1.5 rounded-lg border border-slate-700 hover:bg-slate-800 text-xs font-semibold text-slate-300 transition-all">
+                    Cancelar
+                </button>
+                <button id="btn-custom-prompt-save" type="button" class="px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-bold text-white transition-all">
+                    Guardar
+                </button>
+            </div>
+        </div>
+    </div>
+
     <!-- MODAL: CUSTOM ALERT -->
     <div id="modal-custom-alert" class="hidden fixed inset-0 z-[100] flex items-center justify-center p-4">
         <div class="absolute inset-0 bg-slate-950/80 backdrop-blur-sm" onclick="closeModal('modal-custom-alert')"></div>

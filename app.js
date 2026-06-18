@@ -76,7 +76,6 @@ window.addEventListener('load', () => {
     loadDbConfigValues();
 });
 
-// Setup global events
 function initGlobalEvents() {
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape') {
@@ -104,6 +103,15 @@ function initGlobalEvents() {
         }
     });
 
+    document.getElementById('modal-custom-prompt').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && e.target.tagName === 'INPUT') {
+            e.preventDefault();
+            e.target.blur();
+            const btnSave = document.getElementById('btn-custom-prompt-save');
+            if (btnSave) btnSave.focus();
+        }
+    });
+
     // Global mouse move and mouse up for dragging nodes and connections
     window.addEventListener('mousemove', handleGlobalMouseMove);
     window.addEventListener('mouseup', handleGlobalMouseUp);
@@ -117,6 +125,7 @@ function closeAllModals() {
     closeModal('modal-custom-alert');
     closeModal('modal-generate-choose');
     closeModal('modal-custom-confirm');
+    closeModal('modal-custom-prompt');
 }
 
 function showAlert(message) {
@@ -131,7 +140,7 @@ function showConfirm(message, callback) {
     openModal('modal-custom-confirm');
 }
 
-// Hook confirm accept button once DOM is loaded
+// Hook buttons once DOM is loaded
 window.addEventListener('load', () => {
     const btnAccept = document.getElementById('btn-custom-confirm-accept');
     if (btnAccept) {
@@ -141,6 +150,11 @@ window.addEventListener('load', () => {
                 currentConfirmCallback();
             }
         };
+    }
+
+    const btnPromptSave = document.getElementById('btn-custom-prompt-save');
+    if (btnPromptSave) {
+        btnPromptSave.onclick = executeSaveModelFile;
     }
 });
 
@@ -2020,6 +2034,26 @@ function chooseGenerateZip() {
 }
 
 function saveModelFile() {
+    const defaultName = state.dbConfig.appName.toLowerCase() + '_model';
+    document.getElementById('custom-prompt-input').value = defaultName;
+    openModal('modal-custom-prompt');
+    
+    // Auto focus input and select text
+    setTimeout(() => {
+        const input = document.getElementById('custom-prompt-input');
+        if (input) {
+            input.focus();
+            input.select();
+        }
+    }, 100);
+}
+
+function executeSaveModelFile() {
+    let filename = document.getElementById('custom-prompt-input').value.trim();
+    if (!filename) filename = 'modelo';
+    
+    closeModal('modal-custom-prompt');
+    
     const dataStr = JSON.stringify({
         entities: state.entities,
         relations: state.relations,
@@ -2027,11 +2061,9 @@ function saveModelFile() {
     }, null, 2);
     
     const blob = new Blob([dataStr], { type: 'application/json' });
-    const appName = state.dbConfig.appName.toLowerCase();
-    
     const element = document.createElement("a");
     element.href = URL.createObjectURL(blob);
-    element.download = `${appName}_model.json`;
+    element.download = `${filename}.json`;
     document.body.appendChild(element);
     element.click();
     document.body.removeChild(element);
