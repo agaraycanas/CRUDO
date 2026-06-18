@@ -1126,6 +1126,12 @@ async function buildProjectZip(basePackage = 'org.minombre', projectName = 'proy
     } catch (e) {
         console.warn('CORS or protocol error pre-fetching CRUDO assets. CRUDO editor won\'t be embedded in static folder.', e);
     }
+    
+    if (!crudoHtml || !crudoJs) {
+        setTimeout(() => {
+            showAlert("¡Atención! No se ha podido incluir el editor CRUDO en el proyecto generado porque estás ejecutando CRUDO mediante 'file://' (doble clic en index.html) y el navegador bloquea la lectura de archivos por seguridad (CORS). Para disponer del editor autohospedado en /CRUDO, sirve CRUDO desde un servidor local (por ejemplo usando VS Code Live Server o npx http-server).");
+        }, 1000);
+    }
     saveDbConfig();
 
     const zip = new JSZip();
