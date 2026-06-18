@@ -40,9 +40,9 @@ const state = {
     ],
     dbConfig: {
         appName: 'inventario',
-        dbUrl: 'jdbc:postgresql://localhost:5432/inventario_db',
-        dbUser: 'postgres',
-        dbPass: 'postgres'
+        dbUrl: 'jdbc:mariadb://localhost:3306/test',
+        dbUser: 'root',
+        dbPass: ''
     },
     
     // Interaction States
@@ -993,9 +993,9 @@ function openDbConfigModal() {
 
 function saveDbConfig() {
     state.dbConfig.appName = document.getElementById('config-app-name').value.trim() || 'inventario';
-    state.dbConfig.dbUrl = document.getElementById('config-db-url').value.trim() || 'jdbc:postgresql://localhost:5432/inventario_db';
-    state.dbConfig.dbUser = document.getElementById('config-db-user').value.trim() || 'postgres';
-    state.dbConfig.dbPass = document.getElementById('config-db-pass').value.trim() || 'postgres';
+    state.dbConfig.dbUrl = document.getElementById('config-db-url').value.trim() || 'jdbc:mariadb://localhost:3306/test';
+    state.dbConfig.dbUser = document.getElementById('config-db-user').value.trim() || 'root';
+    state.dbConfig.dbPass = document.getElementById('config-db-pass').value; // Keep whatever is typed, even empty
     closeModal('modal-db-config');
 }
 
@@ -1025,7 +1025,7 @@ function capitalize(str) {
     return str.charAt(0).toUpperCase() + str.slice(1);
 }
 
-async function generateProjectZip() {
+function buildProjectZip() {
     saveDbConfig();
 
     const zip = new JSZip();
@@ -1062,8 +1062,8 @@ async function generateProjectZip() {
 			<artifactId>spring-boot-starter-web</artifactId>
 		</dependency>
 		<dependency>
-			<groupId>org.postgresql</groupId>
-			<artifactId>postgresql</artifactId>
+			<groupId>org.mariadb.jdbc</groupId>
+			<artifactId>mariadb-java-client</artifactId>
 			<scope>runtime</scope>
 		</dependency>
 		<dependency>
@@ -1118,7 +1118,7 @@ public class ${mainClassName} {
 spring.datasource.url=${state.dbConfig.dbUrl}
 spring.datasource.username=${state.dbConfig.dbUser}
 spring.datasource.password=${state.dbConfig.dbPass}
-spring.datasource.driver-class-name=org.postgresql.Driver
+spring.datasource.driver-class-name=org.mariadb.jdbc.Driver
 
 spring.datasource.hikari.maximum-pool-size=5
 spring.datasource.hikari.minimum-idle=2
@@ -1126,7 +1126,7 @@ spring.datasource.hikari.connection-timeout=30000
 
 spring.jpa.hibernate.ddl-auto=update
 spring.jpa.show-sql=true
-spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.PostgreSQLDialect
+spring.jpa.properties.hibernate.dialect=org.hibernate.dialect.MariaDBDialect
 spring.jpa.properties.hibernate.temp.use_jdbc_metadata_defaults=false
 spring.jpa.properties.hibernate.connection.handling_mode=DELAYED_ACQUISITION_AND_RELEASE_AFTER_TRANSACTION
 `;
@@ -1386,6 +1386,44 @@ public class ${ent.name}Controller {
     }
 }`;
         zip.file(`${pkgPath}/controllers/api/${ent.name}Controller.java`, apiControllerCode);
+
+        // --- API REST CONTROLLER UNIT TEST ---
+        const apiControllerTestCode = `package org.agaray.swagger.${appName}.controllers.api;
+
+import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+
+import java.util.Collections;
+
+import org.agaray.swagger.${appName}.models.${ent.name};
+import org.agaray.swagger.${appName}.services.${ent.name}Service;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.servlet.MockMvc;
+
+@WebMvcTest(${ent.name}Controller.class)
+class ${ent.name}ControllerTests {
+
+    @Autowired
+    private MockMvc mockMvc;
+
+    @MockBean
+    private ${ent.name}Service service;
+
+    @Test
+    void testListar() throws Exception {
+        when(service.obtenerTodas()).thenReturn(Collections.emptyList());
+        
+        mockMvc.perform(get("/api/${entPluralLower}")
+                .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk());
+    }
+}`;
+        zip.file(`src/test/java/org/agaray/swagger/${appName}/controllers/api/${ent.name}ControllerTests.java`, apiControllerTestCode);
 
         // --- VIEW CONTROLLER ---
         let injectedServicesFields = [];
@@ -1809,7 +1847,7 @@ public class HomeViewController {
     <div th:fragment="content" class="flex flex-col gap-6 max-w-4xl mx-auto py-12">
         <div class="text-center space-y-4">
             <h1 class="text-4xl font-extrabold tracking-tight text-white">¡Bienvenido a ${capitalize(appName)}!</h1>
-            <p class="text-slate-400 text-md max-w-xl mx-auto">Tu aplicación web con API REST auto-generada está lista y funcionando con soporte de base de datos relacional PostgreSQL.</p>
+            <p class="text-slate-400 text-md max-w-xl mx-auto">Tu aplicación web con API REST auto-generada está lista y funcionando con soporte de base de datos relacional MariaDB.</p>
         </div>
         
         <div class="grid grid-cols-2 gap-6 mt-8">
@@ -1830,13 +1868,34 @@ public class HomeViewController {
 </html>`;
     zip.file("src/main/resources/templates/index.html", homeHtmlContent);
 
+    // 6.5. Base Application Test
+    const mainClassTestContent = `package org.agaray.swagger.${appName};
+
+import org.junit.jupiter.api.Test;
+import org.springframework.boot.test.context.SpringBootTest;
+
+@SpringBootTest
+class ${mainClassName}Tests {
+
+    @Test
+    void contextLoads() {
+    }
+
+}`;
+    zip.file(`src/test/java/org/agaray/swagger/${appName}/${mainClassName}Tests.java`, mainClassTestContent);
+
     // 7. Maven build scripts
     const runTestsBat = `@echo off
 mvn clean test
 pause`;
     zip.file("run-tests.bat", runTestsBat);
 
-    // Download zip
+    return zip;
+}
+
+function generateProjectZip() {
+    const zip = buildProjectZip();
+    const appName = state.dbConfig.appName.toLowerCase();
     zip.generateAsync({type:"blob"}).then(function(content) {
         const element = document.createElement("a");
         element.href = URL.createObjectURL(content);
@@ -1845,4 +1904,45 @@ pause`;
         element.click();
         document.body.removeChild(element);
     });
+}
+
+async function generateProjectToFolder() {
+    try {
+        const dirHandle = await window.showDirectoryPicker();
+        const zip = buildProjectZip();
+        
+        // Write files to selected directory recursively
+        for (const [relativePath, zipEntry] of Object.entries(zip.files)) {
+            if (zipEntry.dir) {
+                const parts = relativePath.split('/');
+                let currentDir = dirHandle;
+                for (const part of parts) {
+                    if (part && part !== '.') {
+                        currentDir = await currentDir.getDirectoryHandle(part, { create: true });
+                    }
+                }
+            } else {
+                const parts = relativePath.split('/');
+                const fileName = parts.pop();
+                let currentDir = dirHandle;
+                for (const part of parts) {
+                    if (part && part !== '.') {
+                        currentDir = await currentDir.getDirectoryHandle(part, { create: true });
+                    }
+                }
+                const fileHandle = await currentDir.getFileHandle(fileName, { create: true });
+                const writable = await fileHandle.createWritable();
+                const content = await zipEntry.async('blob');
+                await writable.write(content);
+                await writable.close();
+            }
+        }
+        
+        showAlert('¡Proyecto generado con éxito directamente en la carpeta seleccionada!');
+    } catch (err) {
+        if (err.name !== 'AbortError') {
+            console.error(err);
+            showAlert('Error al escribir en la carpeta: ' + err.message);
+        }
+    }
 }
