@@ -227,6 +227,7 @@
                         <table class="w-full text-left border-collapse">
                             <thead class="bg-slate-900 border-b border-slate-800 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
                                 <tr>
+                                    <th class="px-4 py-2 text-center w-8" title="Unique / Único">U</th>
                                     <th class="px-4 py-2">Nombre</th>
                                     <th class="px-4 py-2">Tipo Java</th>
                                     <th class="px-4 py-2 text-center w-12">Acciones</th>
@@ -253,7 +254,7 @@
                 <button type="button" onclick="closeModal('modal-entity-edit')" class="px-3.5 py-1.5 rounded-lg border border-slate-700 hover:bg-slate-800 text-xs font-semibold text-slate-300 transition-all">
                     Cancelar
                 </button>
-                <button type="button" onclick="saveEntityEditModal()" class="px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-bold text-white transition-all">
+                <button id="btn-save-entity" type="button" onclick="saveEntityEditModal()" class="px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-bold text-white transition-all">
                     Guardar
                 </button>
             </div>
@@ -298,7 +299,7 @@
                     <button type="button" onclick="closeModal('modal-relation-config')" class="px-3.5 py-1.5 rounded-lg border border-slate-700 hover:bg-slate-800 text-xs font-semibold text-slate-300 transition-all">
                         Cancelar
                     </button>
-                    <button onclick="saveRelationConfig()" class="px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-bold text-white transition-all">
+                    <button id="btn-save-relation" onclick="saveRelationConfig()" class="px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-bold text-white transition-all">
                         Guardar
                     </button>
                 </div>

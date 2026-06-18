@@ -85,6 +85,25 @@ function initGlobalEvents() {
         }
     });
 
+    // Autofocus save buttons on Enter key in input fields inside modals
+    document.getElementById('modal-entity-edit').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && e.target.tagName === 'INPUT') {
+            e.preventDefault();
+            e.target.blur();
+            const btnSave = document.getElementById('btn-save-entity');
+            if (btnSave) btnSave.focus();
+        }
+    });
+
+    document.getElementById('modal-relation-config').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && e.target.tagName === 'INPUT') {
+            e.preventDefault();
+            e.target.blur();
+            const btnSave = document.getElementById('btn-save-relation');
+            if (btnSave) btnSave.focus();
+        }
+    });
+
     // Global mouse move and mouse up for dragging nodes and connections
     window.addEventListener('mousemove', handleGlobalMouseMove);
     window.addEventListener('mouseup', handleGlobalMouseUp);
@@ -727,6 +746,9 @@ function renderEditAttributesList(entity) {
         const disabledAttr = isId ? 'disabled class="bg-slate-950/80 text-slate-500 opacity-60 border border-slate-900 rounded px-2 py-1 w-full"' : 'class="bg-slate-950 border border-slate-800 rounded px-2 py-1 text-white w-full"';
 
         tr.innerHTML = `
+            <td class="px-4 py-2 text-center">
+                <input type="checkbox" class="w-4 h-4 rounded border-slate-800 bg-slate-950 text-indigo-600 focus:ring-indigo-500" ${isId || attr.unique ? 'checked' : ''} ${isId ? 'disabled' : ''} onchange="updateAttributeUnique(${idx}, this.checked)">
+            </td>
             <td class="px-4 py-2">
                 <input type="text" value="${attr.name}" onchange="updateAttributeName(${idx}, this.value)" ${disabledAttr}>
             </td>
@@ -791,6 +813,14 @@ function updateAttributeType(index, val) {
     const entity = state.entities.find(e => e.id === activeEditEntityId);
     if (entity && entity.attributes[index]) {
         entity.attributes[index].type = val;
+        renderEntities();
+    }
+}
+
+function updateAttributeUnique(index, val) {
+    const entity = state.entities.find(e => e.id === activeEditEntityId);
+    if (entity && entity.attributes[index]) {
+        entity.attributes[index].unique = val;
         renderEntities();
     }
 }
@@ -1230,7 +1260,8 @@ spring.jpa.properties.hibernate.connection.handling_mode=DELAYED_ACQUISITION_AND
                 if (jType === 'Date') {
                     jType = 'java.time.LocalDate';
                 }
-                modelFields.push(`    @Column(nullable = false)
+                const uniqueStr = attr.unique ? ', unique = true' : '';
+                modelFields.push(`    @Column(nullable = false${uniqueStr})
     @Schema(description = "${attr.name}", example = "")
     private ${jType} ${attr.name};`);
             }
