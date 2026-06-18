@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html lang="es" class="h-full bg-slate-950 text-slate-100">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CRUDO - Rapid Spring Boot ER Designer</title>
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Outfit', 'sans-serif'],
+                        mono: ['Fira Code', 'monospace'],
+                    },
+                }
+            }
+        }
+    </script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- JSZip for Client-Side ZIP Generation -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <!-- Custom Styles -->
+    <style>
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(15, 23, 42, 0.6);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: rgba(99, 102, 241, 0.2);
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(99, 102, 241, 0.5);
+        }
+        /* Grid background for the giant canvas */
+        .canvas-grid {
+            background-size: 40px 40px;
+            background-image: 
+                linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+            background-color: #020617; /* slate-950 */
+        }
+        /* Animate Modal Scale-up */
+        @keyframes scaleUp {
+            from { transform: scale(0.95); opacity: 0; }
+            to { transform: scale(1); opacity: 1; }
+        }
+        .animate-scale-up {
+            animation: scaleUp 0.15s ease-out forwards;
+        }
+    </style>
+</head>
+<body class="h-full flex flex-col font-sans overflow-hidden select-none">
+
+    <!-- TOP HEADER -->
+    <header class="bg-slate-900 border-b border-slate-800 px-6 py-4 flex items-center justify-between z-10 shrink-0">
+        <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center shadow-lg shadow-indigo-500/20">
+                <i class="fa-solid fa-cubes text-white text-lg"></i>
+            </div>
+            <div>
+                <span class="text-xl font-bold tracking-tight text-white block">CRUDO</span>
+                <span class="text-[10px] text-indigo-400 font-semibold tracking-wider uppercase">Rapid Spring Boot Generator</span>
+            </div>
+        </div>
+
+        <!-- Connection/Drag status indicator -->
+        <div id="status-bar" class="hidden px-4 py-2 bg-indigo-950/40 border border-indigo-500/20 rounded-xl text-sm text-indigo-300 flex items-center gap-2">
+            <span class="relative flex h-2 w-2">
+                <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
+                <span class="relative inline-flex rounded-full h-2 w-2 bg-indigo-500"></span>
+            </span>
+            <span id="status-text">Creando relación...</span>
+            <span class="text-slate-500 text-xs ml-2">[ESC para abortar]</span>
+        </div>
+
+        <!-- Right Side: Action Buttons -->
+        <div class="flex items-center gap-3">
+            <button onclick="clearCanvas()" class="px-4 py-2 rounded-xl bg-slate-800/60 hover:bg-rose-950/40 hover:text-rose-400 hover:border-rose-500/30 text-slate-400 text-xs font-semibold flex items-center gap-2 border border-slate-800 transition-all">
+                <i class="fa-solid fa-trash-can"></i> Limpiar
+            </button>
+            <button onclick="openDbConfigModal()" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-2 border border-slate-700 transition-all">
+                <i class="fa-solid fa-database text-indigo-400"></i> Configurar DB
+            </button>
+            <button onclick="generateProjectZip()" class="px-5 py-2 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white text-xs font-bold flex items-center gap-2 shadow-lg shadow-indigo-600/10 active:scale-95 transition-all">
+                <i class="fa-solid fa-circle-down"></i> Generar Proyecto
+            </button>
+        </div>
+    </header>
+
+    <!-- WORKSPACE CONTAINER -->
+    <div class="flex-1 flex overflow-hidden">
+        
+        <!-- SIDEBAR (ENTITIES LIST & HELP) -->
+        <aside class="w-64 bg-slate-900/60 border-r border-slate-800 flex flex-col p-4 shrink-0 justify-between">
+            <div class="space-y-6">
+                <div>
+                    <h3 class="text-[10px] text-slate-500 font-bold tracking-widest uppercase mb-3 px-2">Guía de Uso</h3>
+                    <div class="bg-slate-950/40 border border-slate-800/60 rounded-xl p-3.5 text-xs text-slate-300 space-y-2.5">
+                        <div class="flex gap-2">
+                            <i class="fa-solid fa-circle-info text-indigo-400 mt-0.5"></i>
+                            <div>
+                                <strong class="block text-white">Crear Entidad</strong>
+                                Haz clic en un punto vacío del canvas.
+                            </div>
+                        </div>
+                        <div class="flex gap-2">
+                            <i class="fa-solid fa-share text-indigo-400 mt-0.5"></i>
+                            <div>
+                                <strong class="block text-white">Crear Relación</strong>
+                                Pincha en una entidad y arrastra hasta otra entidad.
+                            </div>
+                        </div>
+                        <div class="flex gap-2">
+                            <i class="fa-solid fa-sliders text-indigo-400 mt-0.5"></i>
+                            <div>
+                                <strong class="block text-white">Ver / Editar</strong>
+                                Clic simple en una entidad o línea de relación.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="border-t border-slate-800/60 pt-4">
+                    <h3 class="text-[10px] text-slate-500 font-bold tracking-widest uppercase mb-3 px-2">Entidades en Modelo</h3>
+                    <div id="sidebar-entities-list" class="space-y-1.5 max-h-60 overflow-y-auto px-1 text-slate-400 text-xs">
+                        <p class="text-slate-600 italic px-2 py-1">Ninguna entidad creada.</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Footer helper -->
+            <div class="bg-slate-950/20 border border-slate-850 rounded-xl p-3 text-[11px] text-slate-500">
+                <span class="block font-semibold mb-0.5 text-slate-400">Teclas rápidas:</span>
+                <ul class="list-disc list-inside space-y-0.5 opacity-80">
+                    <li>ESC: Cancelar relación</li>
+                </ul>
+            </div>
+        </aside>
+
+        <!-- MAIN CANVAS CONTAINER -->
+        <main class="flex-1 overflow-auto bg-slate-950 relative" id="canvas-container">
+            <!-- Interactive grid canvas -->
+            <div id="interactive-canvas" class="canvas-grid w-[3000px] h-[2000px] relative z-10" onmousedown="handleCanvasMouseDown(event)" onmouseup="handleCanvasMouseUp(event)">
+                <!-- SVG connection lines layer -->
+                <svg id="relations-svg" class="absolute top-0 left-0 w-full h-full pointer-events-none z-30"></svg>
+                
+                <!-- Container for entities to avoid clearing SVG -->
+                <div id="entities-container" class="absolute inset-0 z-20 pointer-events-none"></div>
+            </div>
+        </main>
+    </div>
+
+    <!-- MODAL: CREATE ENTITY -->
+    <div id="modal-entity-create" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div class="absolute inset-0 bg-slate-950/75 backdrop-blur-sm" onclick="closeModal('modal-entity-create')"></div>
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-sm shadow-2xl relative z-10 flex flex-col overflow-hidden animate-scale-up">
+            <div class="px-5 py-4 border-b border-slate-800 flex items-center justify-between">
+                <h3 class="text-sm font-bold text-white tracking-wider uppercase">Nueva Entidad</h3>
+                <button onclick="closeModal('modal-entity-create')" class="text-slate-400 hover:text-white transition-colors">
+                    <i class="fa-solid fa-xmark text-md"></i>
+                </button>
+            </div>
+            <form id="form-entity-create" onsubmit="submitEntityCreate(event)" class="p-5 space-y-4">
+                <input type="hidden" id="entity-create-x">
+                <input type="hidden" id="entity-create-y">
+                <div>
+                    <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Nombre de la Entidad</label>
+                    <input type="text" id="entity-create-name" required pattern="[a-zA-Z0-9]+" title="Solo caracteres alfanuméricos sin espacios" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-indigo-500 text-sm" placeholder="Ej: Categoria">
+                </div>
+                <div class="flex justify-end gap-3 pt-3 border-t border-slate-850">
+                    <button type="button" onclick="closeModal('modal-entity-create')" class="px-3.5 py-1.5 rounded-lg border border-slate-700 hover:bg-slate-800 text-xs font-semibold text-slate-300 transition-all">
+                        Cancelar
+                    </button>
+                    <button type="submit" class="px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-bold text-white transition-all">
+                        Crear
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL: VIEW/EDIT ENTITY & ATTRIBUTES -->
+    <div id="modal-entity-edit" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div class="absolute inset-0 bg-slate-950/75 backdrop-blur-sm" onclick="closeModal('modal-entity-edit')"></div>
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg shadow-2xl relative z-10 flex flex-col overflow-hidden animate-scale-up">
+            <div class="px-5 py-4 border-b border-slate-800 flex items-center justify-between bg-slate-900">
+                <h3 class="text-sm font-bold text-white tracking-wider uppercase">Editar Entidad</h3>
+                <div class="flex items-center gap-3">
+                    <button onclick="deleteEntityFromModal()" class="text-rose-400 hover:text-rose-300 text-xs font-semibold flex items-center gap-1.5 transition-colors" title="Eliminar Entidad">
+                        <i class="fa-solid fa-trash-can"></i> Eliminar
+                    </button>
+                    <button onclick="closeModal('modal-entity-edit')" class="text-slate-400 hover:text-white transition-colors">
+                        <i class="fa-solid fa-xmark text-md"></i>
+                    </button>
+                </div>
+            </div>
+            
+            <div class="p-5 space-y-4 max-h-[75vh] overflow-y-auto">
+                <!-- Entity Name -->
+                <div>
+                    <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Nombre de la Entidad</label>
+                    <div class="flex gap-2">
+                        <input type="text" id="entity-edit-name" class="flex-1 bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-indigo-500 text-sm" placeholder="Ej: Categoria">
+                        <button onclick="renameEntity()" class="px-3 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold transition-all">Renombrar</button>
+                    </div>
+                </div>
+
+                <!-- Attributes Section -->
+                <div>
+                    <div class="flex items-center justify-between mb-3">
+                        <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider">Atributos</label>
+                        <button onclick="addNewAttributeRow()" class="text-indigo-400 hover:text-indigo-300 text-xs font-bold flex items-center gap-1">
+                            <i class="fa-solid fa-plus"></i> Añadir Atributo
+                        </button>
+                    </div>
+
+                    <!-- Attributes Container Table -->
+                    <div class="border border-slate-800 rounded-xl overflow-hidden bg-slate-950">
+                        <table class="w-full text-left border-collapse">
+                            <thead class="bg-slate-900 border-b border-slate-800 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                                <tr>
+                                    <th class="px-4 py-2">Nombre</th>
+                                    <th class="px-4 py-2">Tipo Java</th>
+                                    <th class="px-4 py-2 text-center w-12">Acciones</th>
+                                </tr>
+                            </thead>
+                            <tbody id="attributes-list-body" class="divide-y divide-slate-800/60 text-xs">
+                                <!-- Dynamic attribute rows -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Entity Relations Section -->
+                <div>
+                    <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">Relaciones de la Entidad</label>
+                    <div id="entity-relations-container" class="space-y-2 max-h-40 overflow-y-auto pr-1">
+                        <!-- Dynamic list of relations -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Footer Buttons -->
+            <div class="px-5 py-3.5 border-t border-slate-800 bg-slate-950/40 flex justify-end gap-3">
+                <button type="button" onclick="closeModal('modal-entity-edit')" class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-bold text-white transition-all">
+                    Cerrar y Aplicar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: RELATIONSHIP CONFIG & TYPE -->
+    <div id="modal-relation-config" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div class="absolute inset-0 bg-slate-950/75 backdrop-blur-sm" id="modal-relation-backdrop" onclick="closeModal('modal-relation-config')"></div>
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md shadow-2xl relative z-10 flex flex-col overflow-hidden animate-scale-up">
+            <div class="px-5 py-4 border-b border-slate-800 flex items-center justify-between">
+                <h3 class="text-sm font-bold text-white tracking-wider uppercase" id="relation-modal-title">Configurar Relación</h3>
+                <div class="flex items-center gap-3">
+                    <button id="btn-delete-relation" onclick="deleteRelationFromModal()" class="hidden text-rose-400 hover:text-rose-300 text-xs font-semibold flex items-center gap-1.5 transition-colors">
+                        <i class="fa-solid fa-trash-can"></i> Eliminar
+                    </button>
+                    <button onclick="closeModal('modal-relation-config')" class="text-slate-400 hover:text-white transition-colors">
+                        <i class="fa-solid fa-xmark text-md"></i>
+                    </button>
+                </div>
+            </div>
+            <div class="p-5 space-y-4">
+                <div>
+                    <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Selecciona el tipo de relación:</label>
+                    <div id="relation-options" class="space-y-2">
+                        <!-- Options generated dynamically -->
+                    </div>
+                </div>
+                
+                <div class="border-t border-slate-800 pt-3.5 space-y-3">
+                    <div>
+                        <label id="lbl-target-role" class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Nombre del atributo en E1</label>
+                        <input type="text" id="relation-target-role" required pattern="[a-zA-Z0-9_]+" title="Solo alfanuméricos y guiones bajos" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-indigo-500 text-sm">
+                    </div>
+                    <div>
+                        <label id="lbl-source-role" class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Nombre del atributo en E2</label>
+                        <input type="text" id="relation-source-role" required pattern="[a-zA-Z0-9_]+" title="Solo alfanuméricos y guiones bajos" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-indigo-500 text-sm">
+                    </div>
+                </div>
+                
+                <div class="flex justify-end gap-3 pt-3 border-t border-slate-850">
+                    <button type="button" onclick="closeModal('modal-relation-config')" class="px-3.5 py-1.5 rounded-lg border border-slate-700 hover:bg-slate-800 text-xs font-semibold text-slate-300 transition-all">
+                        Cancelar
+                    </button>
+                    <button onclick="saveRelationConfig()" class="px-3.5 py-1.5 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-bold text-white transition-all">
+                        Confirmar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: DATABASE CONFIGURATION -->
+    <div id="modal-db-config" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div class="absolute inset-0 bg-slate-950/75 backdrop-blur-sm" onclick="closeModal('modal-db-config')"></div>
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md shadow-2xl relative z-10 flex flex-col overflow-hidden animate-scale-up">
+            <div class="px-5 py-4 border-b border-slate-800 flex items-center justify-between">
+                <h3 class="text-sm font-bold text-white tracking-wider uppercase">Configuración de Base de Datos</h3>
+                <button onclick="closeModal('modal-db-config')" class="text-slate-400 hover:text-white transition-colors">
+                    <i class="fa-solid fa-xmark text-md"></i>
+                </button>
+            </div>
+            <div class="p-5 space-y-4">
+                <div>
+                    <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Nombre de la Aplicación</label>
+                    <input type="text" id="config-app-name" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-indigo-500 text-sm" placeholder="inventario">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">URL JDBC de la Base de Datos (PostgreSQL)</label>
+                    <input type="text" id="config-db-url" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-indigo-500 text-xs font-mono" placeholder="jdbc:postgresql://localhost:5432/inventario_db">
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Usuario</label>
+                        <input type="text" id="config-db-user" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-indigo-500 text-sm" placeholder="postgres">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-1.5">Contraseña</label>
+                        <input type="password" id="config-db-pass" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-indigo-500 text-sm" placeholder="contraseña">
+                    </div>
+                </div>
+                <div class="flex justify-end gap-3 pt-3 border-t border-slate-850">
+                    <button onclick="closeModal('modal-db-config')" class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-bold text-white transition-all">
+                        Guardar Configuración
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: CUSTOM ALERT -->
+    <div id="modal-custom-alert" class="hidden fixed inset-0 z-[100] flex items-center justify-center p-4">
+        <div class="absolute inset-0 bg-slate-950/80 backdrop-blur-sm" onclick="closeModal('modal-custom-alert')"></div>
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-sm shadow-2xl relative z-10 flex flex-col overflow-hidden animate-scale-up">
+            <div class="px-5 py-4 border-b border-slate-800 flex items-center gap-2.5 text-amber-500 bg-slate-900">
+                <i class="fa-solid fa-circle-exclamation text-lg"></i>
+                <h3 class="text-sm font-bold text-white tracking-wider uppercase">Atención</h3>
+            </div>
+            <div class="p-5">
+                <p id="custom-alert-message" class="text-sm text-slate-300 leading-relaxed"></p>
+            </div>
+            <div class="px-5 py-3.5 border-t border-slate-800 bg-slate-950/40 flex justify-end">
+                <button type="button" onclick="closeModal('modal-custom-alert')" class="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-xs font-bold text-white transition-all">
+                    Aceptar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Application Logic -->
+    <script src="app.js"></script>
+</body>
+</html>
