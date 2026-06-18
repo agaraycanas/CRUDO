@@ -1224,6 +1224,8 @@ public class ${mainClassName} {
     // 3. application.properties
     const propsContent = `spring.application.name=${appName}
 
+spring.output.ansi.enabled=always
+
 spring.datasource.url=${state.dbConfig.dbUrl}
 spring.datasource.username=${state.dbConfig.dbUser}
 spring.datasource.password=${state.dbConfig.dbPass}
