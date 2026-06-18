@@ -413,6 +413,26 @@
         </div>
     </div>
 
+    <!-- MODAL: PROGRESS OVERLAY -->
+    <div id="modal-progress" class="hidden fixed inset-0 z-[120] flex items-center justify-center p-4">
+        <div class="absolute inset-0 bg-slate-950/80 backdrop-blur-sm"></div>
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-sm shadow-2xl relative z-10 flex flex-col overflow-hidden animate-scale-up p-6 space-y-4">
+            <div class="flex items-center gap-3">
+                <div class="w-8 h-8 rounded-lg bg-indigo-950/50 border border-indigo-500/20 flex items-center justify-center text-indigo-400 shrink-0 animate-spin">
+                    <i class="fa-solid fa-spinner"></i>
+                </div>
+                <div>
+                    <h3 class="text-sm font-bold text-white tracking-wider uppercase text-left">Exportando Proyecto</h3>
+                    <span id="progress-status-text" class="text-[10px] text-slate-400 font-semibold block text-left">Preparando exportación...</span>
+                </div>
+            </div>
+            <!-- Progress Bar Container -->
+            <div class="w-full bg-slate-950 border border-slate-800 rounded-full h-3.5 overflow-hidden p-0.5 animate-pulse">
+                <div id="progress-bar-fill" class="bg-gradient-to-r from-indigo-500 to-violet-500 h-full rounded-full transition-all duration-150 w-[0%]"></div>
+            </div>
+        </div>
+    </div>
+
     <!-- MODAL: CUSTOM CONFIRM -->
     <div id="modal-custom-confirm" class="hidden fixed inset-0 z-[110] flex items-center justify-center p-4">
         <div class="absolute inset-0 bg-slate-950/80 backdrop-blur-sm" onclick="closeModal('modal-custom-confirm')"></div>

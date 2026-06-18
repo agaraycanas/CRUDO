@@ -126,6 +126,7 @@ function closeAllModals() {
     closeModal('modal-generate-choose');
     closeModal('modal-custom-confirm');
     closeModal('modal-custom-prompt');
+    closeModal('modal-progress');
 }
 
 function showAlert(message) {
@@ -1286,8 +1287,10 @@ spring.jpa.properties.hibernate.connection.handling_mode=DELAYED_ACQUISITION_AND
 
         relationsInfo.manyToOnes.forEach(rel => {
             imports.add('lombok.ToString');
+            imports.add('lombok.EqualsAndHashCode');
             modelFields.push(`    @ManyToOne(fetch = FetchType.EAGER)
     @ToString.Exclude
+    @EqualsAndHashCode.Exclude
     @Schema(description = "Relación con ${rel.target.name}")
     private ${rel.target.name} ${rel.fieldName};`);
         });
@@ -1295,8 +1298,12 @@ spring.jpa.properties.hibernate.connection.handling_mode=DELAYED_ACQUISITION_AND
         relationsInfo.oneToManyMappedBys.forEach(rel => {
             imports.add('java.util.List');
             imports.add('com.fasterxml.jackson.annotation.JsonIgnore');
+            imports.add('lombok.ToString');
+            imports.add('lombok.EqualsAndHashCode');
             modelFields.push(`    @OneToMany(mappedBy = "${rel.mappedByField}", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     @JsonIgnore
+    @ToString.Exclude
+    @EqualsAndHashCode.Exclude
     @Schema(description = "Listado de ${rel.source.name} asociados")
     private List<${rel.source.name}> ${rel.fieldName};`);
         });
@@ -1304,12 +1311,16 @@ spring.jpa.properties.hibernate.connection.handling_mode=DELAYED_ACQUISITION_AND
         relationsInfo.manyToManySource.forEach(rel => {
             imports.add('java.util.Set');
             imports.add('java.util.HashSet');
+            imports.add('lombok.ToString');
+            imports.add('lombok.EqualsAndHashCode');
             modelFields.push(`    @ManyToMany(fetch = FetchType.EAGER)
     @JoinTable(
         name = "${entLower}_${rel.fieldName}_join",
         joinColumns = @JoinColumn(name = "${entLower}_id"),
         inverseJoinColumns = @JoinColumn(name = "${uncapitalize(rel.target.name)}_id")
     )
+    @ToString.Exclude
+    @EqualsAndHashCode.Exclude
     @Schema(description = "Relación muchos a muchos con ${rel.target.name}")
     private Set<${rel.target.name}> ${rel.fieldName} = new HashSet<>();`);
         });
@@ -1318,22 +1329,32 @@ spring.jpa.properties.hibernate.connection.handling_mode=DELAYED_ACQUISITION_AND
             imports.add('java.util.Set');
             imports.add('java.util.HashSet');
             imports.add('com.fasterxml.jackson.annotation.JsonIgnore');
+            imports.add('lombok.ToString');
+            imports.add('lombok.EqualsAndHashCode');
             modelFields.push(`    @ManyToMany(mappedBy = "${rel.mappedByField}", fetch = FetchType.LAZY)
     @JsonIgnore
+    @ToString.Exclude
+    @EqualsAndHashCode.Exclude
     @Schema(description = "Relación muchos a muchos con ${rel.source.name} (no propietaria)")
     private Set<${rel.source.name}> ${rel.fieldName} = new HashSet<>();`);
         });
 
         relationsInfo.oneToOnes.forEach(rel => {
+            imports.add('lombok.ToString');
+            imports.add('lombok.EqualsAndHashCode');
             if (rel.isOwner) {
                 modelFields.push(`    @OneToOne(cascade = CascadeType.ALL)
     @JoinColumn(name = "${rel.fieldName}_id", referencedColumnName = "id")
+    @ToString.Exclude
+    @EqualsAndHashCode.Exclude
     @Schema(description = "Relación uno a uno con ${rel.target.name}")
     private ${rel.target.name} ${rel.fieldName};`);
             } else {
                 imports.add('com.fasterxml.jackson.annotation.JsonIgnore');
                 modelFields.push(`    @OneToOne(mappedBy = "${rel.mappedByField}", fetch = FetchType.LAZY)
     @JsonIgnore
+    @ToString.Exclude
+    @EqualsAndHashCode.Exclude
     @Schema(description = "Relación uno a uno con ${rel.target.name} (no propietaria)")
     private ${rel.target.name} ${rel.fieldName};`);
             }
@@ -1368,26 +1389,121 @@ public interface ${ent.name}Repository extends JpaRepository<${ent.name}, Long> 
         zip.file(`${pkgPath}/repositories/${ent.name}Repository.java`, repoCode);
 
         // --- SERVICE ---
+        let serviceImports = new Set([
+            'lombok.RequiredArgsConstructor',
+            `${fullPkg}.models.${ent.name}`,
+            `${fullPkg}.repositories.${ent.name}Repository`,
+            'org.springframework.stereotype.Service',
+            'java.util.List',
+            'java.util.Optional'
+        ]);
+
+        let serviceInjectedRepos = [];
+        serviceInjectedRepos.push(`    private final ${ent.name}Repository repository;`);
+
+        relationsInfo.manyToManyTarget.forEach(rel => {
+            serviceImports.add(`${fullPkg}.models.${rel.source.name}`);
+            serviceImports.add(`${fullPkg}.repositories.${rel.source.name}Repository`);
+            serviceInjectedRepos.push(`    private final ${rel.source.name}Repository ${uncapitalize(rel.source.name)}Repository;`);
+        });
+
+        relationsInfo.oneToManyMappedBys.forEach(rel => {
+            serviceImports.add(`${fullPkg}.models.${rel.source.name}`);
+            serviceImports.add(`${fullPkg}.repositories.${rel.source.name}Repository`);
+            serviceInjectedRepos.push(`    private final ${rel.source.name}Repository ${uncapitalize(rel.source.name)}Repository;`);
+        });
+
+        relationsInfo.oneToOnes.filter(r => !r.isOwner).forEach(rel => {
+            serviceImports.add(`${fullPkg}.models.${rel.target.name}`);
+            serviceImports.add(`${fullPkg}.repositories.${rel.target.name}Repository`);
+            serviceInjectedRepos.push(`    private final ${rel.target.name}Repository ${uncapitalize(rel.target.name)}Repository;`);
+        });
+
+        const uniqueServiceImports = Array.from(serviceImports).sort().map(imp => `import ${imp};`).join('\n');
+        const uniqueServiceInjectedRepos = Array.from(new Set(serviceInjectedRepos)).join('\n');
+
+        let syncOldRelations = [];
+        let syncNewRelations = [];
+
+        // Sync manyToManyTarget
+        relationsInfo.manyToManyTarget.forEach(rel => {
+            syncOldRelations.push(`            if (oldObj.get${capitalize(rel.fieldName)}() != null) {
+                for (${rel.source.name} sourceItem : oldObj.get${capitalize(rel.fieldName)}()) {
+                    sourceItem.get${capitalize(rel.mappedByField)}().remove(oldObj);
+                    ${uncapitalize(rel.source.name)}Repository.save(sourceItem);
+                }
+            }`);
+            
+            syncNewRelations.push(`        if (savedObj.get${capitalize(rel.fieldName)}() != null) {
+            for (${rel.source.name} sourceItem : savedObj.get${capitalize(rel.fieldName)}()) {
+                ${rel.source.name} managedSource = ${uncapitalize(rel.source.name)}Repository.findById(sourceItem.getId()).orElse(sourceItem);
+                managedSource.get${capitalize(rel.mappedByField)}().add(savedObj);
+                ${uncapitalize(rel.source.name)}Repository.save(managedSource);
+            }
+        }`);
+        });
+
+        // Sync oneToManyMappedBys
+        relationsInfo.oneToManyMappedBys.forEach(rel => {
+            syncOldRelations.push(`            if (oldObj.get${capitalize(rel.fieldName)}() != null) {
+                for (${rel.source.name} child : oldObj.get${capitalize(rel.fieldName)}()) {
+                    child.set${capitalize(rel.mappedByField)}(null);
+                    ${uncapitalize(rel.source.name)}Repository.save(child);
+                }
+            }`);
+
+            syncNewRelations.push(`        if (savedObj.get${capitalize(rel.fieldName)}() != null) {
+            for (${rel.source.name} child : savedObj.get${capitalize(rel.fieldName)}()) {
+                ${rel.source.name} managedChild = ${uncapitalize(rel.source.name)}Repository.findById(child.getId()).orElse(child);
+                managedChild.set${capitalize(rel.mappedByField)}(savedObj);
+                ${uncapitalize(rel.source.name)}Repository.save(managedChild);
+            }
+        }`);
+        });
+
+        // Sync oneToOnes (non-owning)
+        relationsInfo.oneToOnes.filter(r => !r.isOwner).forEach(rel => {
+            syncOldRelations.push(`            if (oldObj.get${capitalize(rel.fieldName)}() != null) {
+                ${rel.target.name} oldTarget = oldObj.get${capitalize(rel.fieldName)}();
+                oldTarget.set${capitalize(rel.mappedByField)}(null);
+                ${uncapitalize(rel.target.name)}Repository.save(oldTarget);
+            }`);
+
+            syncNewRelations.push(`        if (savedObj.get${capitalize(rel.fieldName)}() != null) {
+            ${rel.target.name} targetItem = savedObj.get${capitalize(rel.fieldName)}();
+            ${rel.target.name} managedTarget = ${uncapitalize(rel.target.name)}Repository.findById(targetItem.getId()).orElse(targetItem);
+            managedTarget.set${capitalize(rel.mappedByField)}(savedObj);
+            ${uncapitalize(rel.target.name)}Repository.save(managedTarget);
+        }`);
+        });
+
+        let syncOldCode = syncOldRelations.length > 0 ? `        if (obj.getId() != null) {
+            repository.findById(obj.getId()).ifPresent(oldObj -> {
+${syncOldRelations.join('\n')}
+            });
+        }` : '';
+
+        let syncNewCode = syncNewRelations.length > 0 ? `\n${syncNewRelations.join('\n')}` : '';
+
         const serviceCode = `package ${fullPkg}.services;
 
-import lombok.RequiredArgsConstructor;
-import ${fullPkg}.models.${ent.name};
-import ${fullPkg}.repositories.${ent.name}Repository;
-import org.springframework.stereotype.Service;
-import java.util.List;
+${uniqueServiceImports}
 
 @Service
 @RequiredArgsConstructor
 public class ${ent.name}Service {
 
-    private final ${ent.name}Repository repository;
+${uniqueServiceInjectedRepos}
 
     public List<${ent.name}> obtenerTodas() {
         return repository.findAll();
     }
 
     public ${ent.name} guardar(${ent.name} obj) {
-        return repository.save(obj);
+${syncOldCode}
+        ${ent.name} savedObj = repository.save(obj);
+${syncNewCode}
+        return savedObj;
     }
 
     public ${ent.name} obtenerPorId(Long id) {
@@ -1505,35 +1621,58 @@ class ${ent.name}ControllerTests {
         // --- VIEW CONTROLLER ---
         let injectedServicesFields = [];
         let viewInjectModels = [];
+        let viewImports = new Set([
+            'lombok.RequiredArgsConstructor',
+            `${fullPkg}.models.${ent.name}`,
+            `${fullPkg}.services.${ent.name}Service`,
+            'org.springframework.stereotype.Controller',
+            'org.springframework.ui.Model',
+            'org.springframework.web.bind.annotation.*',
+            'org.springframework.web.servlet.mvc.support.RedirectAttributes'
+        ]);
 
+        // 1. manyToOnes
         relationsInfo.manyToOnes.forEach(rel => {
+            viewImports.add(`${fullPkg}.services.${rel.target.name}Service`);
             injectedServicesFields.push(`    private final ${rel.target.name}Service ${uncapitalize(rel.target.name)}Service;`);
             viewInjectModels.push(`        model.addAttribute("${pluralize(uncapitalize(rel.target.name))}", ${uncapitalize(rel.target.name)}Service.obtenerTodas());`);
-        });
-        relationsInfo.manyToManySource.forEach(rel => {
-            injectedServicesFields.push(`    private final ${rel.target.name}Service ${uncapitalize(rel.target.name)}Service;`);
-            viewInjectModels.push(`        model.addAttribute("${pluralize(uncapitalize(rel.target.name))}", ${uncapitalize(rel.target.name)}Service.obtenerTodas());`);
-        });
-        relationsInfo.oneToOnes.filter(r => r.isOwner).forEach(rel => {
-            injectedServicesFields.push(`    private final ${rel.target.name}Service ${uncapitalize(rel.target.name)}Service;`);
-            viewInjectModels.push(`        model.addAttribute("${pluralize(uncapitalize(rel.target.name))}", ${rel.target.name}Service.obtenerTodas());`);
         });
 
-        const uniqueInjectedServicesFields = Array.from(new Set(injectedServicesFields)).join('\n');
-        const uniqueViewInjectModels = Array.from(new Set(viewInjectModels)).join('\n');
+        // 2. manyToManySource
+        relationsInfo.manyToManySource.forEach(rel => {
+            viewImports.add(`${fullPkg}.services.${rel.target.name}Service`);
+            injectedServicesFields.push(`    private final ${rel.target.name}Service ${uncapitalize(rel.target.name)}Service;`);
+            viewInjectModels.push(`        model.addAttribute("${pluralize(uncapitalize(rel.target.name))}", ${uncapitalize(rel.target.name)}Service.obtenerTodas());`);
+        });
+
+        // 3. manyToManyTarget
+        relationsInfo.manyToManyTarget.forEach(rel => {
+            viewImports.add(`${fullPkg}.services.${rel.source.name}Service`);
+            injectedServicesFields.push(`    private final ${rel.source.name}Service ${uncapitalize(rel.source.name)}Service;`);
+            viewInjectModels.push(`        model.addAttribute("${pluralize(uncapitalize(rel.source.name))}", ${uncapitalize(rel.source.name)}Service.obtenerTodas());`);
+        });
+
+        // 4. oneToOnes (both owner and non-owner)
+        relationsInfo.oneToOnes.forEach(rel => {
+            viewImports.add(`${fullPkg}.services.${rel.target.name}Service`);
+            injectedServicesFields.push(`    private final ${rel.target.name}Service ${uncapitalize(rel.target.name)}Service;`);
+            viewInjectModels.push(`        model.addAttribute("${pluralize(uncapitalize(rel.target.name))}", ${uncapitalize(rel.target.name)}Service.obtenerTodas());`);
+        });
+
+        // 5. oneToManyMappedBys
+        relationsInfo.oneToManyMappedBys.forEach(rel => {
+            viewImports.add(`${fullPkg}.services.${rel.source.name}Service`);
+            injectedServicesFields.push(`    private final ${rel.source.name}Service ${uncapitalize(rel.source.name)}Service;`);
+            viewInjectModels.push(`        model.addAttribute("${pluralize(uncapitalize(rel.source.name))}", ${uncapitalize(rel.source.name)}Service.obtenerTodas());`);
+        });
+
+        const uniqueInjectedServicesFields = Array.from(new Set(injectedServicesFields)).sort().join('\n');
+        const uniqueViewInjectModels = Array.from(new Set(viewInjectModels)).sort().join('\n');
+        const uniqueViewImports = Array.from(viewImports).sort().map(imp => `import ${imp};`).join('\n');
 
         const viewControllerCode = `package ${fullPkg}.controllers.view;
 
-import lombok.RequiredArgsConstructor;
-import ${fullPkg}.models.${ent.name};
-import ${fullPkg}.services.${ent.name}Service;
-${relationsInfo.manyToOnes.map(r => `import ${fullPkg}.services.${r.target.name}Service;`).join('\n')}
-${relationsInfo.manyToManySource.map(r => `import ${fullPkg}.services.${r.target.name}Service;`).join('\n')}
-${relationsInfo.oneToOnes.filter(r => r.isOwner).map(r => `import ${fullPkg}.services.${r.target.name}Service;`).join('\n')}
-import org.springframework.stereotype.Controller;
-import org.springframework.ui.Model;
-import org.springframework.web.bind.annotation.*;
-import org.springframework.web.servlet.mvc.support.RedirectAttributes;
+${uniqueViewImports}
 
 @Controller
 @RequestMapping("/web/${entPluralLower}")
@@ -1707,7 +1846,7 @@ ${uniqueViewInjectModels}
             </div>`);
         });
 
-        relationsInfo.oneToOnes.filter(r => r.isOwner).forEach(r => {
+        relationsInfo.oneToOnes.forEach(r => {
             formFields.push(`            <div>
                 <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">${capitalize(r.fieldName)}</label>
                 <select th:field="*{${r.fieldName}}" class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-indigo-500 text-sm">
@@ -1722,6 +1861,26 @@ ${uniqueViewInjectModels}
                 <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">${capitalize(r.fieldName)}</label>
                 <select th:field="*{${r.fieldName}}" multiple class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-indigo-500 text-sm h-28">
                     <option th:each="sub : \${${pluralize(uncapitalize(r.target.name))}}" th:value="\${sub.id}" th:text="\${sub.nombre}"></option>
+                </select>
+                <span class="text-[10px] text-slate-500 mt-1 block">Presiona Ctrl/Cmd para seleccionar múltiples opciones</span>
+            </div>`);
+        });
+
+        relationsInfo.manyToManyTarget.forEach(r => {
+            formFields.push(`            <div>
+                <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">${capitalize(r.fieldName)}</label>
+                <select th:field="*{${r.fieldName}}" multiple class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-indigo-500 text-sm h-28">
+                    <option th:each="sub : \${${pluralize(uncapitalize(r.source.name))}}" th:value="\${sub.id}" th:text="\${sub.nombre}"></option>
+                </select>
+                <span class="text-[10px] text-slate-500 mt-1 block">Presiona Ctrl/Cmd para seleccionar múltiples opciones</span>
+            </div>`);
+        });
+
+        relationsInfo.oneToManyMappedBys.forEach(r => {
+            formFields.push(`            <div>
+                <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">${capitalize(r.fieldName)}</label>
+                <select th:field="*{${r.fieldName}}" multiple class="w-full bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-indigo-500 text-sm h-28">
+                    <option th:each="sub : \${${pluralize(uncapitalize(r.source.name))}}" th:value="\${sub.id}" th:text="\${sub.nombre}"></option>
                 </select>
                 <span class="text-[10px] text-slate-500 mt-1 block">Presiona Ctrl/Cmd para seleccionar múltiples opciones</span>
             </div>`);
@@ -1986,11 +2145,49 @@ function generateProjectZip(basePackage = 'org.minombre', projectName = 'proyect
 async function generateProjectToFolder(basePackage = 'org.minombre', projectName = 'proyecto') {
     try {
         const dirHandle = await window.showDirectoryPicker();
+        
+        // Open progress modal
+        openModal('modal-progress');
+        const statusText = document.getElementById('progress-status-text');
+        const barFill = document.getElementById('progress-bar-fill');
+        
+        statusText.innerText = 'Preparando limpieza de directorio...';
+        barFill.style.width = '2%';
+        
+        // Safely collect all directory entries first to avoid mutating iterator
+        const entriesToDelete = [];
+        for await (const entry of dirHandle.values()) {
+            entriesToDelete.push(entry);
+        }
+        
+        // Delete all entries, updating progress
+        let deleteCount = 0;
+        const totalDelete = entriesToDelete.length;
+        for (const entry of entriesToDelete) {
+            statusText.innerText = `Borrando: ${entry.name}...`;
+            await dirHandle.removeEntry(entry.name, { recursive: true });
+            deleteCount++;
+            const pct = Math.round((deleteCount / totalDelete) * 13) + 2; // From 2% to 15%
+            barFill.style.width = `${pct}%`;
+        }
+        
+        statusText.innerText = 'Directorio limpio. Generando archivos...';
+        barFill.style.width = '15%';
+        
         const zip = buildProjectZip(basePackage, projectName);
+        const entries = Object.entries(zip.files);
+        const total = entries.length;
+        let count = 0;
         
         // Write files to selected directory recursively
-        for (const [relativePath, zipEntry] of Object.entries(zip.files)) {
+        for (const [relativePath, zipEntry] of entries) {
+            count++;
+            const pct = Math.round((count / total) * 85) + 15; // From 15% to 100%
+            
             if (zipEntry.dir) {
+                statusText.innerText = `Creando carpeta: ${relativePath}`;
+                barFill.style.width = `${pct}%`;
+                
                 const parts = relativePath.split('/');
                 let currentDir = dirHandle;
                 for (const part of parts) {
@@ -2001,6 +2198,10 @@ async function generateProjectToFolder(basePackage = 'org.minombre', projectName
             } else {
                 const parts = relativePath.split('/');
                 const fileName = parts.pop();
+                
+                statusText.innerText = `Escribiendo: ${fileName}`;
+                barFill.style.width = `${pct}%`;
+                
                 let currentDir = dirHandle;
                 for (const part of parts) {
                     if (part && part !== '.') {
@@ -2014,7 +2215,16 @@ async function generateProjectToFolder(basePackage = 'org.minombre', projectName
                 await writable.close();
             }
         }
+        
+        statusText.innerText = '¡Exportación completada!';
+        barFill.style.width = '100%';
+        
+        setTimeout(() => {
+            closeModal('modal-progress');
+        }, 600);
+        
     } catch (err) {
+        closeModal('modal-progress');
         if (err.name !== 'AbortError') {
             console.error(err);
             showAlert('Error al escribir en la carpeta: ' + err.message);
@@ -2030,7 +2240,10 @@ function chooseGenerateFolder() {
     const basePackage = document.getElementById('gen-base-package').value.trim() || 'org.minombre';
     const projectName = document.getElementById('gen-project-name').value.trim() || 'proyecto';
     closeModal('modal-generate-choose');
-    generateProjectToFolder(basePackage, projectName);
+    
+    showConfirm('¡ATENCIÓN! Se eliminarán todos los archivos y subcarpetas existentes dentro de la carpeta que selecciones para evitar conflictos con el nuevo proyecto. ¿Deseas continuar?', () => {
+        generateProjectToFolder(basePackage, projectName);
+    });
 }
 
 function chooseGenerateZip() {
