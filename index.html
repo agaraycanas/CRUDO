@@ -89,6 +89,13 @@
             <button onclick="clearCanvas()" class="px-4 py-2 rounded-xl bg-slate-800/60 hover:bg-rose-950/40 hover:text-rose-400 hover:border-rose-500/30 text-slate-400 text-xs font-semibold flex items-center gap-2 border border-slate-800 transition-all">
                 <i class="fa-solid fa-trash-can"></i> Limpiar
             </button>
+            <button onclick="saveModelFile()" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-2 border border-slate-700 transition-all" title="Guardar diseño del Canvas (.json)">
+                <i class="fa-solid fa-floppy-disk text-indigo-400"></i> Guardar
+            </button>
+            <button onclick="triggerLoadModelFile()" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-2 border border-slate-700 transition-all" title="Cargar diseño del Canvas (.json)">
+                <i class="fa-solid fa-folder-open text-indigo-400"></i> Cargar
+            </button>
+            <input type="file" id="load-model-input" accept=".json" class="hidden" onchange="loadModelFile(event)">
             <button onclick="openDbConfigModal()" class="px-4 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center gap-2 border border-slate-700 transition-all">
                 <i class="fa-solid fa-database text-indigo-400"></i> Configurar DB
             </button>

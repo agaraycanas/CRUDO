@@ -2018,3 +2018,60 @@ function chooseGenerateZip() {
     closeModal('modal-generate-choose');
     generateProjectZip();
 }
+
+function saveModelFile() {
+    const dataStr = JSON.stringify({
+        entities: state.entities,
+        relations: state.relations,
+        dbConfig: state.dbConfig
+    }, null, 2);
+    
+    const blob = new Blob([dataStr], { type: 'application/json' });
+    const appName = state.dbConfig.appName.toLowerCase();
+    
+    const element = document.createElement("a");
+    element.href = URL.createObjectURL(blob);
+    element.download = `${appName}_model.json`;
+    document.body.appendChild(element);
+    element.click();
+    document.body.removeChild(element);
+}
+
+function triggerLoadModelFile() {
+    document.getElementById('load-model-input').click();
+}
+
+function loadModelFile(event) {
+    const file = event.target.files[0];
+    if (!file) return;
+    
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            const imported = JSON.parse(e.target.result);
+            if (!imported.entities || !imported.relations) {
+                showAlert('El archivo JSON no tiene un formato de modelo CRUDO válido.');
+                return;
+            }
+            
+            // Populate state
+            state.entities = imported.entities || [];
+            state.relations = imported.relations || [];
+            if (imported.dbConfig) {
+                state.dbConfig = imported.dbConfig;
+                loadDbConfigValues();
+            }
+            
+            // Re-render
+            renderEntities();
+            renderRelations();
+            
+            // Reset input value to allow loading same file again
+            event.target.value = '';
+        } catch (err) {
+            console.error(err);
+            showAlert('Error al importar el archivo JSON: ' + err.message);
+        }
+    };
+    reader.readAsText(file);
+}
