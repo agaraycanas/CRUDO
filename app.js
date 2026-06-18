@@ -1112,7 +1112,20 @@ function capitalize(str) {
     return str.charAt(0).toUpperCase() + str.slice(1);
 }
 
-function buildProjectZip(basePackage = 'org.minombre', projectName = 'proyecto') {
+async function buildProjectZip(basePackage = 'org.minombre', projectName = 'proyecto') {
+    // Fetch CRUDO assets for self-hosting inside the generated app
+    let crudoHtml = '';
+    let crudoJs = '';
+    try {
+        const [resHtml, resJs] = await Promise.all([
+            fetch('index.html'),
+            fetch('app.js')
+        ]);
+        crudoHtml = await resHtml.text();
+        crudoJs = await resJs.text();
+    } catch (e) {
+        console.warn('CORS or protocol error pre-fetching CRUDO assets. CRUDO editor won\'t be embedded in static folder.', e);
+    }
     saveDbConfig();
 
     const zip = new JSZip();
@@ -1949,6 +1962,27 @@ ${uniqueViewInjectModels}
         zip.file(`src/main/resources/templates/${entPluralLower}/form.html`, thFormHtml);
     });
 
+    // Embed CRUDO editor in static folder if loaded successfully
+    if (crudoHtml && crudoJs) {
+        zip.file("src/main/resources/static/crudo/index.html", crudoHtml);
+        zip.file("src/main/resources/static/crudo/app.js", crudoJs);
+        
+        // Crudo controller redirect mapping
+        const crudoControllerCode = `package ${fullPkg}.controllers.view;
+
+import org.springframework.stereotype.Controller;
+import org.springframework.web.bind.annotation.GetMapping;
+
+@Controller
+public class CrudoViewController {
+    @GetMapping("/CRUDO")
+    public String crudo() {
+        return "redirect:/crudo/index.html";
+    }
+}`;
+        zip.file(`${pkgPath}/controllers/view/CrudoViewController.java`, crudoControllerCode);
+    }
+
     // Sidebar navigation dynamic listing
     let sidebarLinks = state.entities.map(e => {
         const pluralLower = pluralize(e.name).toLowerCase();
@@ -1958,6 +1992,17 @@ ${uniqueViewInjectModels}
                         <span>${pluralize(e.name)}</span>
                     </a>`;
     }).join('\n');
+
+    sidebarLinks += `
+                    <div class="h-px bg-slate-800/50 my-4"></div>
+                    <a href="/CRUDO" target="_blank"
+                       class="w-full flex items-center justify-between px-4 py-2.5 rounded-xl text-left text-xs font-semibold text-indigo-400 hover:bg-slate-800/30 hover:text-white transition-all border border-indigo-500/15 bg-indigo-950/10">
+                        <span class="flex items-center gap-2">
+                            <i class="fa-solid fa-diagram-project text-[10px]"></i>
+                            CRUDO Editor
+                        </span>
+                        <i class="fa-solid fa-arrow-up-right-from-square text-[9px]"></i>
+                    </a>`;
 
     const layoutContent = `<!DOCTYPE html>
 <html lang="es" class="h-full bg-slate-950 text-slate-100" xmlns:th="http://www.thymeleaf.org" th:fragment="main(content, activeTab)">
@@ -2157,8 +2202,8 @@ pause`;
     return zip;
 }
 
-function generateProjectZip(basePackage = 'org.minombre', projectName = 'proyecto') {
-    const zip = buildProjectZip(basePackage, projectName);
+async function generateProjectZip(basePackage = 'org.minombre', projectName = 'proyecto') {
+    const zip = await buildProjectZip(basePackage, projectName);
     const appName = projectName.toLowerCase();
     zip.generateAsync({type:"blob"}).then(function(content) {
         const element = document.createElement("a");
@@ -2209,7 +2254,7 @@ async function generateProjectToFolder(basePackage = 'org.minombre', projectName
         statusText.innerText = 'Directorio limpio. Generando archivos...';
         barFill.style.width = '15%';
         
-        const zip = buildProjectZip(basePackage, projectName);
+        const zip = await buildProjectZip(basePackage, projectName);
         const entries = Object.entries(zip.files);
         const total = entries.length;
         let count = 0;
@@ -2285,13 +2330,13 @@ function chooseGenerateFolder() {
     });
 }
 
-function chooseGenerateZip() {
+async function chooseGenerateZip() {
     const basePackage = document.getElementById('gen-base-package').value.trim() || 'org.minombre';
     const projectName = document.getElementById('gen-project-name').value.trim() || 'proyecto';
     state.dbConfig.basePackage = basePackage;
     state.dbConfig.appName = projectName;
     closeModal('modal-generate-choose');
-    generateProjectZip(basePackage, projectName);
+    await generateProjectZip(basePackage, projectName);
 }
 
 function saveModelFile() {
