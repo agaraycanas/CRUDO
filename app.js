@@ -97,12 +97,33 @@ function closeAllModals() {
     closeModal('modal-db-config');
     closeModal('modal-custom-alert');
     closeModal('modal-generate-choose');
+    closeModal('modal-custom-confirm');
 }
 
 function showAlert(message) {
     document.getElementById('custom-alert-message').innerText = message;
     openModal('modal-custom-alert');
 }
+
+let currentConfirmCallback = null;
+function showConfirm(message, callback) {
+    document.getElementById('custom-confirm-message').innerText = message;
+    currentConfirmCallback = callback;
+    openModal('modal-custom-confirm');
+}
+
+// Hook confirm accept button once DOM is loaded
+window.addEventListener('load', () => {
+    const btnAccept = document.getElementById('btn-custom-confirm-accept');
+    if (btnAccept) {
+        btnAccept.onclick = () => {
+            closeModal('modal-custom-confirm');
+            if (typeof currentConfirmCallback === 'function') {
+                currentConfirmCallback();
+            }
+        };
+    }
+});
 
 function loadDbConfigValues() {
     document.getElementById('config-app-name').value = state.dbConfig.appName;
@@ -113,12 +134,12 @@ function loadDbConfigValues() {
 
 // Clear canvas elements with verification
 function clearCanvas() {
-    if (confirm('¿Estás seguro de que deseas borrar todo el canvas? Se eliminarán todas las entidades y relaciones actuales.')) {
+    showConfirm('¿Estás seguro de que deseas borrar todo el canvas? Se eliminarán todas las entidades y relaciones actuales.', () => {
         state.entities = [];
         state.relations = [];
         renderEntities();
         renderRelations();
-    }
+    });
 }
 
 // Render entities on Canvas
@@ -797,13 +818,13 @@ function removeAttribute(index) {
 
 function deleteEntityFromModal() {
     if (!activeEditEntityId) return;
-    if (confirm('¿Estás seguro de que deseas eliminar esta entidad y todas sus relaciones asociadas?')) {
+    showConfirm('¿Estás seguro de que deseas eliminar esta entidad y todas sus relaciones asociadas?', () => {
         state.entities = state.entities.filter(e => e.id !== activeEditEntityId);
         state.relations = state.relations.filter(r => r.sourceEntityId !== activeEditEntityId && r.targetEntityId !== activeEditEntityId);
         closeModal('modal-entity-edit');
         renderEntities();
         renderRelations();
-    }
+    });
 }
 
 // Propose custom role names based on entity names and relationship type
@@ -986,11 +1007,11 @@ function saveRelationConfig() {
 
 function deleteRelationFromModal() {
     if (!activeEditRelationId) return;
-    if (confirm('¿Estás seguro de que deseas eliminar esta relación?')) {
+    showConfirm('¿Estás seguro de que deseas eliminar esta relación?', () => {
         state.relations = state.relations.filter(r => r.id !== activeEditRelationId);
         closeModal('modal-relation-config');
         renderRelations();
-    }
+    });
 }
 
 // Database config
