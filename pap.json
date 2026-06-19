@@ -1,0 +1,99 @@
+{
+  "entities": [
+    {
+      "id": "1781800214665",
+      "name": "Aficion",
+      "x": 21,
+      "y": 236,
+      "attributes": [
+        {
+          "name": "id",
+          "type": "Long"
+        },
+        {
+          "name": "nombre",
+          "type": "String",
+          "unique": true
+        }
+      ]
+    },
+    {
+      "id": "1781800217881",
+      "name": "Persona",
+      "x": 316,
+      "y": 10,
+      "attributes": [
+        {
+          "name": "id",
+          "type": "Long"
+        },
+        {
+          "name": "email",
+          "type": "String",
+          "unique": true
+        },
+        {
+          "name": "nombre",
+          "type": "String"
+        }
+      ]
+    },
+    {
+      "id": "1781800223201",
+      "name": "Pais",
+      "x": 676,
+      "y": 239,
+      "attributes": [
+        {
+          "name": "id",
+          "type": "Long"
+        },
+        {
+          "name": "nombre",
+          "type": "String",
+          "unique": true
+        }
+      ]
+    }
+  ],
+  "relations": [
+    {
+      "id": "r_1781800234367",
+      "sourceEntityId": "1781800214665",
+      "targetEntityId": "1781800217881",
+      "type": "NaN",
+      "sourceRole": "gustos",
+      "targetRole": "aficionados"
+    },
+    {
+      "id": "r_1781800243505",
+      "sourceEntityId": "1781800217881",
+      "targetEntityId": "1781800223201",
+      "type": "Na1",
+      "sourceRole": "nacidos",
+      "targetRole": "nace"
+    },
+    {
+      "id": "r_1781801450554",
+      "sourceEntityId": "1781800217881",
+      "targetEntityId": "1781800223201",
+      "type": "Na1",
+      "sourceRole": "residentes",
+      "targetRole": "vive"
+    },
+    {
+      "id": "r_1781801469274",
+      "sourceEntityId": "1781800214665",
+      "targetEntityId": "1781800217881",
+      "type": "NaN",
+      "sourceRole": "odios",
+      "targetRole": "haters"
+    }
+  ],
+  "dbConfig": {
+    "appName": "inventario",
+    "dbUrl": "jdbc:mariadb://localhost:3306/test",
+    "dbUser": "root",
+    "dbPass": ""
+  }
+}
