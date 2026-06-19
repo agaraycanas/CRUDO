@@ -42,7 +42,8 @@ const state = {
         appName: 'inventario',
         dbUrl: 'jdbc:mariadb://localhost:3306/test',
         dbUser: 'root',
-        dbPass: ''
+        dbPass: '',
+        basePackage: 'org.minombre'
     },
     
     // Interaction States
@@ -164,6 +165,38 @@ function loadDbConfigValues() {
     document.getElementById('config-db-url').value = state.dbConfig.dbUrl;
     document.getElementById('config-db-user').value = state.dbConfig.dbUser;
     document.getElementById('config-db-pass').value = state.dbConfig.dbPass;
+    syncHeaderInputs();
+}
+
+function syncHeaderInputs() {
+    const appName = state.dbConfig.appName || 'proyecto';
+    const basePkg = state.dbConfig.basePackage || 'org.minombre';
+
+    // Update header
+    const hApp = document.getElementById('header-app-name');
+    if (hApp) hApp.value = appName;
+    const hPkg = document.getElementById('header-base-package');
+    if (hPkg) hPkg.value = basePkg;
+
+    // Update DB Config modal
+    const cApp = document.getElementById('config-app-name');
+    if (cApp) cApp.value = appName;
+
+    // Update Generate modal
+    const gApp = document.getElementById('gen-project-name');
+    if (gApp) gApp.value = appName;
+    const gPkg = document.getElementById('gen-base-package');
+    if (gPkg) gPkg.value = basePkg;
+}
+
+function updateAppName(val) {
+    state.dbConfig.appName = val.trim() || 'proyecto';
+    syncHeaderInputs();
+}
+
+function updateBasePackage(val) {
+    state.dbConfig.basePackage = val.trim() || 'org.minombre';
+    syncHeaderInputs();
 }
 
 // Clear canvas elements with verification
@@ -1083,6 +1116,7 @@ function saveDbConfig() {
     state.dbConfig.dbUrl = document.getElementById('config-db-url').value.trim() || 'jdbc:mariadb://localhost:3306/test';
     state.dbConfig.dbUser = document.getElementById('config-db-user').value.trim() || 'root';
     state.dbConfig.dbPass = document.getElementById('config-db-pass').value; // Keep whatever is typed, even empty
+    syncHeaderInputs();
     closeModal('modal-db-config');
 }
 
@@ -1124,13 +1158,19 @@ async function buildProjectZip(basePackage = 'org.minombre', projectName = 'proy
         crudoHtml = await resHtml.text();
         crudoJs = await resJs.text();
     } catch (e) {
-        console.warn('CORS or protocol error pre-fetching CRUDO assets. CRUDO editor won\'t be embedded in static folder.', e);
+        console.warn('CORS or protocol error pre-fetching CRUDO assets. Trying fallback...', e);
+        // Fallback index.html directly from DOM outerHTML
+        crudoHtml = '<!DOCTYPE html>\n' + document.documentElement.outerHTML;
     }
     
-    if (!crudoHtml || !crudoJs) {
-        setTimeout(() => {
-            showAlert("¡Atención! No se ha podido incluir el editor CRUDO en el proyecto generado porque estás ejecutando CRUDO mediante 'file://' (doble clic en index.html) y el navegador bloquea la lectura de archivos por seguridad (CORS). Para disponer del editor autohospedado en /CRUDO, sirve CRUDO desde un servidor local (por ejemplo usando VS Code Live Server o npx http-server).");
-        }, 1000);
+    if (!crudoJs) {
+        // If app.js failed, prompt the user with a file picker to load it
+        try {
+            showAlert("¡Atención! CRUDO se ejecuta desde un archivo local (file://) y el navegador bloquea la carga automática del script del editor por políticas de CORS. Para incluir el editor CRUDO en tu aplicación, por favor selecciona el archivo 'app.js' de la herramienta.");
+            crudoJs = await getCrudoJsFromFilePicker();
+        } catch (err) {
+            console.error('No se pudo cargar app.js del selector de archivos:', err);
+        }
     }
     saveDbConfig();
 
@@ -2420,4 +2460,38 @@ function loadModelFile(event) {
         }
     };
     reader.readAsText(file);
+}
+
+
+async function getCrudoJsFromFilePicker() {
+    try {
+        if (window.showOpenFilePicker) {
+            const [fileHandle] = await window.showOpenFilePicker({
+                types: [{
+                    description: 'CRUDO app.js script',
+                    accept: { 'text/javascript': ['.js'] }
+                }],
+                multiple: false
+            });
+            const file = await fileHandle.getFile();
+            return await file.text();
+        } else {
+            return new Promise((resolve) => {
+                const input = document.createElement('input');
+                input.type = 'file';
+                input.accept = '.js';
+                input.onchange = async () => {
+                    if (input.files.length > 0) {
+                        resolve(await input.files[0].text());
+                    } else {
+                        resolve(null);
+                    }
+                };
+                input.click();
+            });
+        }
+    } catch (e) {
+        console.warn("User cancelled or file access failed", e);
+        return null;
+    }
 }
