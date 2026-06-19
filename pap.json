@@ -91,9 +91,10 @@
     }
   ],
   "dbConfig": {
-    "appName": "inventario",
+    "appName": "pap",
     "dbUrl": "jdbc:mariadb://localhost:3306/test",
     "dbUser": "root",
-    "dbPass": ""
+    "dbPass": "",
+    "basePackage": "org.agaray"
   }
 }
